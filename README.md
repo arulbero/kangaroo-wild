@@ -82,7 +82,7 @@ Worker threads and batch size can be set via command-line flags:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-w N` | 16 | Number of worker threads |
-| `-b N` | 80 | Kangaroos per worker |
+| `-b N` | 20 | Kangaroos per worker |
 
 The total parallelism is `C = workers × batch`. Higher C increases throughput but also increases the latency overhead per key.
 
