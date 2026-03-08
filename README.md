@@ -108,10 +108,14 @@ Key features:
 - **Extend mode**: for key ranges larger than the database covers, the program automatically partitions the search space and searches all partitions.
 - **Parallel mode**: multiple independent keys can be searched simultaneously, with workers distributing across all unsolved keys.
 
-## License
 
-MIT
 
 ## Acknowledgments
 
-- Modular inversion based on code by [Jean Luc Pons](https://github.com/JeanLucPons/Kangaroo), licensed under GPL-3.0
+
+Modular inversion based on code by [Jean Luc Pons](https://github.com/JeanLucPons/Kangaroo), licensed under GPL-3.0
+Scored DP technique inspired by: D.J. Bernstein and T. Lange, "Computing small discrete logarithms faster", INDOCRYPT 2012 — paper  (https://eprint.iacr.org/2012/458.pdf)
+
+
+## License
+GPL-3.0
