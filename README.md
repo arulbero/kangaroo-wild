@@ -111,3 +111,7 @@ Key features:
 ## License
 
 MIT
+
+## Acknowledgments
+
+- Modular inversion based on code by [Jean Luc Pons](https://github.com/JeanLucPons/Kangaroo), licensed under GPL-3.0
