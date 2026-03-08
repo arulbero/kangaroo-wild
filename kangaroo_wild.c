@@ -1,3 +1,16 @@
+/*
+ * kangaroo_wild.c
+ * Pollard's kangaroo wild search using scored DP database
+ *
+ * Author: arulbero
+ * License: GPL-3.0 (see LICENSE file)
+ *
+ * Uses modular inversion code by Jean Luc Pons (GPL-3.0)
+ * Scored DP technique based on: D.J. Bernstein and T. Lange,
+ * "Computing small discrete logarithms faster", INDOCRYPT 2012
+ */
+
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
