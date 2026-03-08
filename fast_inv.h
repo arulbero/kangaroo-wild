@@ -1,4 +1,8 @@
 // fast_inv.h - DRS62 modular inversion, simplified
+// Based on code by Jean Luc Pons
+// Original: https://github.com/JeanLucPons/Kangaroo
+// Licensed under GPL-3.0
+
 #ifndef FAST_INV_H
 #define FAST_INV_H
 
