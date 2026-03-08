@@ -114,6 +114,7 @@ Key features:
 
 
 Modular inversion based on code by [Jean Luc Pons](https://github.com/JeanLucPons/Kangaroo), licensed under GPL-3.0
+
 Scored DP technique inspired by: D.J. Bernstein and T. Lange, "Computing small discrete logarithms faster", INDOCRYPT 2012 — paper  (https://eprint.iacr.org/2012/458.pdf)
 
 
