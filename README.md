@@ -36,8 +36,9 @@ Two large files must be downloaded separately from Internet Archive:
 
 | File | Size | Download |
 |------|------|----------|
-| `75_scored_16_fingerprints.bin` | ~2 GB | [Download from Internet Archive](https://archive.org/download/75-scored-16-fingerprints/75_scored_16_fingerprints.bin) |
-| `75_scored_16_tame_db.bin` | ~4 GB | [Download from Internet Archive](https://archive.org/download/75_scored_16_tame_db.bin/75_scored_16_tame_db.bin) |
+| `75_scored_16_fingerprints.bin` | ~2 GB | [Download from Internet Archive](https://archive.org/download/75-scored-16-fingerprints/75_scored_16_fingerprints.bin)
+| `75_scored_16_tame_db.bin` | ~4 GB | [Download from Internet Archive](https://archive.org/download/75-scored-16-tame-db/75_scored_16_tame_db.bin)|
+
 
 Place all 4 database files in the same directory as the executable.
 
