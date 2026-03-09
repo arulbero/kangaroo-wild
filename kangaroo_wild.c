@@ -38,7 +38,7 @@
 // Performance tuning defaults (can be overridden via -w and -b flags)
 #define DEFAULT_NUM_WORKERS 16
 #define DEFAULT_BATCH_K     20
-#define VITA_WILD_MAX   (1ULL << 22)  // Max steps before wild respawn
+#define VITA_WILD_MAX   (1ULL << 23)  // Max steps before wild respawn
 
 // File paths (must match the tame DB output files)
 
