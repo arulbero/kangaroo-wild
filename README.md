@@ -72,20 +72,12 @@ Place all 4 database files in the same directory as the executable.
 
 ### Tuning parameters
 
-Worker threads and batch size can be set via command-line flags:
+Worker threads and batch size can be set only before the compilation:
 
-```bash
-# Use 8 threads with 64 kangaroos per thread
-./kangaroo_wild -w 8 -b 64
-
-# Combine with any command
-./kangaroo_wild -w 32 -b 100 single 02abc123...
 ```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-w N` | 16 | Number of worker threads |
-| `-b N` | 20 | Kangaroos per worker |
+#define DEFAULT_NUM_WORKERS 16
+#define DEFAULT_BATCH_K     80
+```
 
 The total parallelism is `C = workers × batch`. Higher C increases throughput but also increases the latency overhead per key.
 
