@@ -20,7 +20,7 @@ The scored DP technique significantly reduces the expected number of steps compa
 ## Compilation
 
 ```bash
-gcc -O3 -march=native -o kangaroo_wild kangaroo_wild.c G_stub.c -lpthread -lm
+gcc -O3 -march=native -falign-functions=32 -falign-loops=16 kangaroo_wild.c G_stub.c -o kangaroo_wild -pthread -lm -flto
 ```
 
 ## Required database files
