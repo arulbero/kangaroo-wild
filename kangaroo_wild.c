@@ -32,10 +32,10 @@
 // ==========================================
 // USER-CONFIGURABLE PARAMETERS
 // File paths must match the tame DB output files.
-// Workers/batch can be set via -w and -b flags.
+// Workers/batch can be set only before the compilation
 // ==========================================
 
-// Performance tuning defaults (can be overridden via -w and -b flags)
+// Performance tuning defaults
 #define DEFAULT_NUM_WORKERS 16
 #define DEFAULT_BATCH_K     20
 #define VITA_WILD_MAX   (1ULL << 23)  // Max steps before wild respawn
