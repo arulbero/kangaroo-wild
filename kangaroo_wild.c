@@ -42,10 +42,10 @@
 
 // File paths (must match the tame DB output files)
 
-static const char* DB_FILENAME = "75_scored_16_tame_db.bin";
-static const char* FINGERPRINT_FILENAME = "75_scored_16_fingerprints.bin";
-static const char* BUCKET_OFFSETS_FILENAME = "75_scored_16_bucket_offsets.bin";
-static const char* TRAINING_PARAMS_FILENAME = "75_training_16_params.bin";
+static const char* DB_FILENAME = "75_scored_16_tame_db_v2.bin";
+static const char* FINGERPRINT_FILENAME = "75_scored_16_fingerprints_v2.bin";
+static const char* BUCKET_OFFSETS_FILENAME = "75_scored_16_bucket_offsets_v2.bin";
+static const char* TRAINING_PARAMS_FILENAME = "75_training_16_params_v2.bin";
 
 
 static const char* PUBKEY_LIST_FILENAME = "public_keys.txt";
