@@ -64,11 +64,11 @@ https://gofile.io/d/4x90xf
 
 ### Choosing a database size
 
-| DB size | Fingerprints in RAM | Approx. steps to solve | Best for |
+| DB size | Fingerprints in RAM | Best for |
 |---------|-------------------|----------------------|----------|
-| 2^28 | ~1 GB | ~350M | Machines with 4–8 GB RAM |
-| 2^29 | ~2 GB | ~250M | Machines with 8–16 GB RAM |
-| 2^30 | ~4 GB | ~200M | Machines with 16+ GB RAM |
+| 2^28 | ~1 GB |  Machines with 4–8 GB RAM |
+| 2^29 | ~2 GB |  Machines with 8–16 GB RAM |
+| 2^30 | ~4 GB |  Machines with 16+ GB RAM |
 
 Larger databases reduce the expected number of steps per key but require more RAM for the fingerprint index (always locked in memory). The tame DB itself can stay on SSD with the `-ssd` option.
 
