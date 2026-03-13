@@ -65,7 +65,7 @@ https://gofile.io/d/4x90xf
 ### Choosing a database size
 
 | DB size | Fingerprints in RAM | Best for |
-|---------|-------------------|----------------------|----------|
+|---------|---------------------|----------|
 | 2^28 | ~1 GB |  Machines with 4–8 GB RAM |
 | 2^29 | ~2 GB |  Machines with 8–16 GB RAM |
 | 2^30 | ~4 GB |  Machines with 16+ GB RAM |
