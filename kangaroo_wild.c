@@ -42,10 +42,10 @@
 
 // File paths (must match the tame DB output files)
 
-static const char* DB_FILENAME = "75_scored_16_tame_db_v2.bin";
-static const char* FINGERPRINT_FILENAME = "75_scored_16_fingerprints_v2.bin";
-static const char* BUCKET_OFFSETS_FILENAME = "75_scored_16_bucket_offsets_v2.bin";
-static const char* TRAINING_PARAMS_FILENAME = "75_training_16_params_v2.bin";
+static const char* DB_FILENAME = "75_scored_16_29_tame_db.bin";
+static const char* FINGERPRINT_FILENAME = "75_scored_16_29_fingerprints.bin";
+static const char* BUCKET_OFFSETS_FILENAME = "75_scored_16_29_bucket_offsets.bin";
+static const char* TRAINING_PARAMS_FILENAME = "75_training_16_29_params.bin";
 
 
 static const char* PUBKEY_LIST_FILENAME = "public_keys.txt";
@@ -152,7 +152,7 @@ static volatile uint64_t stat_visited_dp_cycle = 0;
 static __int128 w_quarto, w_half, midpoint;
 
 // Extended range mode: per-partition targets
-#define MAX_PARTITIONS 4096   // supports up to 12 extra bits over DB range
+#define MAX_PARTITIONS 65536   // supports up to 16 extra bits over DB range
 static int num_partitions = 1;  // 1 = normal mode (no partitioning)
 static Point partition_target[MAX_PARTITIONS];
 static Point partition_wild_base[MAX_PARTITIONS];
@@ -170,12 +170,20 @@ static char* partition_pubkey_hex[MAX_PARTITIONS];  // for reporting
 static const uint64_t Gx[4] = {0x59f2815b16f81798, 0x029bfcdb2dce28d9, 0x55a06295ce870b07, 0x79be667ef9dcbbac};
 static const uint64_t Gy[4] = {0x9c47d08ffb10d4b8, 0xfd17b448a6855419, 0x5da4fbfc0e1108a8, 0x483ada7726a3c465};
 
+// Storage mode: 0 = SSD (default), 1 = RAM (mlock everything)
+#define STORAGE_SSD 0
+#define STORAGE_RAM 1
+static int storage_mode = STORAGE_SSD;
+
 // Fingerprint / bucket offsets
 static uint32_t* fingerprints = NULL;
 static void* bucket_offsets = NULL;
 static int bucket_offsets_is32 = 0;
 static size_t bucket_offsets_map_size = 0;
 static uint64_t fingerprint_count = 0;
+static size_t fingerprint_map_size = 0;    // for cleanup
+static size_t compact_db_map_size = 0;     // for mlock/cleanup tracking
+static int compact_db_is_mmap = 0;         // 1 if mmap'd (vs calloc'd)
 
 // ==========================================
 // INSTRUMENTATION
@@ -535,15 +543,31 @@ static int tame_db_lookup_hash(uint64_t x_hi, __int128* dist_out, int* n_matches
     uint32_t fp = hash_fingerprint32(x_hi);
     uint64_t start = bucket_off_get(bucket);
     uint64_t end   = bucket_off_get(bucket + 1);
+
+    // Pass 1: scan fingerprints (in RAM), collect match indices, issue prefetches
+    uint64_t match_idx[MAX_FP_MATCHES];
     int count = 0;
     for (uint64_t i = start; i < end; i++) {
         if (fingerprints[i] == fp) {
-            __sync_fetch_and_add(&disk_lookups, 1);
-            if (dist_out && count < MAX_FP_MATCHES)
-                dist_out[count] = load_compact_dist(&compact_db_array[i]);
+            if (count < MAX_FP_MATCHES) {
+                match_idx[count] = i;
+                // Prefetch the compact_db_array entry — may be on SSD
+                __builtin_prefetch(&compact_db_array[i], 0, 0);
+            }
             count++;
         }
     }
+
+    // Pass 2: read compact_db entries (pages now in flight from SSD)
+    if (count > 0) {
+        __sync_fetch_and_add(&disk_lookups, count < MAX_FP_MATCHES ? count : MAX_FP_MATCHES);
+        int n = (count > MAX_FP_MATCHES) ? MAX_FP_MATCHES : count;
+        if (dist_out) {
+            for (int j = 0; j < n; j++)
+                dist_out[j] = load_compact_dist(&compact_db_array[match_idx[j]]);
+        }
+    }
+
     if (n_matches) *n_matches = (count > MAX_FP_MATCHES) ? MAX_FP_MATCHES : count;
     return count > 0;
 }
@@ -562,13 +586,22 @@ static void load_tame_db(const char* filename) {
     tame_db_count = tame_db_file_size / entry_size_on_disk;
 
     printf("====================================================\n");
-    printf("[DB] %.2f KB | %lu entries (disk: %lu B/entry, dist:%u, trunc:%u)\n",
-           tame_db_file_size/1024.0, (unsigned long)tame_db_count,
+    printf("[DB] %.2f GB | %lu entries (disk: %lu B/entry, dist:%u, trunc:%u)\n",
+           tame_db_file_size/(1024.0*1024.0*1024.0), (unsigned long)tame_db_count,
            (unsigned long)entry_size_on_disk, rt_dist_bytes, rt_trunc_bits);
+    printf("[DB] Storage mode: %s\n", storage_mode == STORAGE_RAM ? "RAM (mlock all)" : "SSD (lazy paging)");
+
+    struct timespec db_t0, db_t1;
+    clock_gettime(CLOCK_MONOTONIC, &db_t0);
 
     if (rt_dist_bytes == MAX_DIST_BYTES) {
-        compact_db_array = mmap(NULL, tame_db_file_size, PROT_READ, MAP_SHARED, tame_db_fd, 0);
+        // Direct mmap — on-disk layout matches struct layout
+        int mmap_flags = MAP_SHARED;
+        if (storage_mode == STORAGE_RAM) mmap_flags |= MAP_POPULATE;
+        compact_db_array = mmap(NULL, tame_db_file_size, PROT_READ, mmap_flags, tame_db_fd, 0);
         if (compact_db_array == MAP_FAILED) { printf("[ERROR] mmap DB failed\n"); exit(1); }
+        compact_db_is_mmap = 1;
+        compact_db_map_size = tame_db_file_size;
     } else {
         // Expand: read rt_dist_bytes per entry, zero-pad to MAX_DIST_BYTES
         uint8_t* raw = mmap(NULL, tame_db_file_size, PROT_READ, MAP_SHARED, tame_db_fd, 0);
@@ -578,22 +611,46 @@ static void load_tame_db(const char* filename) {
         for (uint64_t i = 0; i < tame_db_count; i++)
             memcpy(compact_db_array[i].dist, raw + i * entry_size_on_disk, rt_dist_bytes);
         munmap(raw, tame_db_file_size);
+        compact_db_is_mmap = 0;
+        compact_db_map_size = tame_db_count * sizeof(CompactDPEntry);
     }
-    madvise(compact_db_array, tame_db_count * sizeof(CompactDPEntry), MADV_RANDOM);
 
-    // Fingerprints
+    madvise(compact_db_array, compact_db_map_size, MADV_RANDOM);
+
+    if (storage_mode == STORAGE_RAM) {
+        // RAM mode: lock DB into physical memory
+        if (mlock(compact_db_array, compact_db_map_size) != 0)
+            printf("[DB] WARNING: mlock DB failed (need more RAM or ulimit -l?)\n");
+        else
+            printf("[DB] mlock'd %.2f GB into RAM\n", compact_db_map_size/(1024.0*1024.0*1024.0));
+    } else {
+        // SSD mode: hint the kernel — random access, don't readahead aggressively
+        posix_fadvise(tame_db_fd, 0, tame_db_file_size, POSIX_FADV_RANDOM);
+        printf("[DB] SSD mode: DB pages will be loaded on demand from disk\n");
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &db_t1);
+    double db_el = (db_t1.tv_sec - db_t0.tv_sec) + (db_t1.tv_nsec - db_t0.tv_nsec) / 1e9;
+    printf("[DB] Loaded in %.1fs\n", db_el);
+
+    // Fingerprints — always locked in RAM (critical for performance)
     struct stat fp_stat;
     if (stat(FINGERPRINT_FILENAME, &fp_stat) == -1) {
         printf("[ERROR] Fingerprint file not found: %s\n", FINGERPRINT_FILENAME); exit(1);
     }
     int fp_fd = open(FINGERPRINT_FILENAME, O_RDONLY);
     fingerprint_count = fp_stat.st_size / sizeof(uint32_t);
-    fingerprints = mmap(NULL, fp_stat.st_size, PROT_READ, MAP_SHARED, fp_fd, 0);
+    fingerprint_map_size = (size_t)fp_stat.st_size;
+    int fp_flags = MAP_SHARED;
+    if (storage_mode == STORAGE_RAM) fp_flags |= MAP_POPULATE;
+    fingerprints = mmap(NULL, fp_stat.st_size, PROT_READ, fp_flags, fp_fd, 0);
     if (fingerprints == MAP_FAILED) { printf("[ERROR] mmap fingerprints failed\n"); exit(1); }
-    mlock(fingerprints, fp_stat.st_size);
-    printf("[FP] Fingerprints: %.2f KB (%lu entries)\n", fp_stat.st_size/1024.0, fingerprint_count);
+    if (mlock(fingerprints, fp_stat.st_size) != 0)
+        printf("[FP] WARNING: mlock fingerprints failed\n");
+    printf("[FP] Fingerprints: %.2f GB (%lu entries) [mlock'd]\n",
+           fp_stat.st_size/(1024.0*1024.0*1024.0), fingerprint_count);
 
-    // Bucket offsets — auto-detect HASH_INDEX_BITS if not set by V2
+    // Bucket offsets — always locked in RAM (small, critical)
     struct stat bo_stat;
     if (stat(BUCKET_OFFSETS_FILENAME, &bo_stat) == -1) {
         printf("[ERROR] Bucket offsets not found: %s\n", BUCKET_OFFSETS_FILENAME); exit(1);
@@ -634,12 +691,24 @@ static void load_tame_db(const char* filename) {
         }
     }
 
-    bucket_offsets = mmap(NULL, bucket_offsets_map_size, PROT_READ, MAP_SHARED, bo_fd, 0);
+    int bo_flags = MAP_SHARED;
+    if (storage_mode == STORAGE_RAM) bo_flags |= MAP_POPULATE;
+    bucket_offsets = mmap(NULL, bucket_offsets_map_size, PROT_READ, bo_flags, bo_fd, 0);
     if (bucket_offsets == MAP_FAILED) { printf("[ERROR] mmap bucket offsets failed\n"); exit(1); }
-    mlock(bucket_offsets, bucket_offsets_map_size);
-    printf("[BO] Bucket offsets: %.2f KB (HASH_INDEX_BITS=%u, %s)\n",
-           bucket_offsets_map_size/1024.0, rt_hash_index_bits,
+    if (mlock(bucket_offsets, bucket_offsets_map_size) != 0)
+        printf("[BO] WARNING: mlock bucket offsets failed\n");
+    printf("[BO] Bucket offsets: %.2f MB (HASH_INDEX_BITS=%u, %s) [mlock'd]\n",
+           bucket_offsets_map_size/(1024.0*1024.0), rt_hash_index_bits,
            bucket_offsets_is32 ? "u32" : "u64");
+
+    // Memory summary
+    double locked_gb = (fingerprint_map_size + bucket_offsets_map_size) / (1024.0*1024.0*1024.0);
+    if (storage_mode == STORAGE_RAM)
+        locked_gb += compact_db_map_size / (1024.0*1024.0*1024.0);
+    printf("[MEM] Total locked in RAM: %.2f GB | DB on %s: %.2f GB\n",
+           locked_gb,
+           storage_mode == STORAGE_RAM ? "RAM" : "SSD",
+           compact_db_map_size/(1024.0*1024.0*1024.0));
     printf("====================================================\n");
 }
 
@@ -1681,6 +1750,22 @@ int main(int argc, char** argv) {
     BATCH_K = DEFAULT_BATCH_K;
 
     // ======================================
+    // PRE-SCAN: extract -ram / -ssd flag from anywhere in argv
+    // ======================================
+    for (int i = 1; i < argc; i++) {
+        if (!strcasecmp(argv[i], "-ram")) {
+            storage_mode = STORAGE_RAM;
+            // Shift remaining args down
+            for (int j = i; j < argc - 1; j++) argv[j] = argv[j+1];
+            argc--; i--;
+        } else if (!strcasecmp(argv[i], "-ssd")) {
+            storage_mode = STORAGE_SSD;
+            for (int j = i; j < argc - 1; j++) argv[j] = argv[j+1];
+            argc--; i--;
+        }
+    }
+
+    // ======================================
     // HELP
     // ======================================
     if (argc > 1 && (!strcasecmp(argv[1], "help") || !strcasecmp(argv[1], "-h") || !strcasecmp(argv[1], "--help"))) {
@@ -1718,6 +1803,13 @@ int main(int argc, char** argv) {
         printf("              range and searches all partitions in parallel.\n");
         printf("              Example: %s extend 03abcd... 66 67\n\n", argv[0]);
         printf("  help        Show this help message.\n\n");
+        printf("Options (can appear anywhere on the command line):\n\n");
+        printf("  -ssd        (default) Keep tame DB on SSD, load pages on demand.\n");
+        printf("              Only fingerprints + bucket offsets are locked in RAM (~2 GB).\n");
+        printf("              Use this when RAM < total DB size. Minimal speed loss.\n\n");
+        printf("  -ram        Lock ALL data in RAM (DB + fingerprints + bucket offsets).\n");
+        printf("              Fastest, but needs enough RAM for everything (~6+ GB).\n");
+        printf("              Uses MAP_POPULATE for immediate pre-fault.\n\n");
         printf("Required DB files (generated by tame phase):\n");
         printf("  %s\n", DB_FILENAME);
         printf("  %s\n", FINGERPRINT_FILENAME);
@@ -1730,6 +1822,7 @@ int main(int argc, char** argv) {
         printf("  BATCH_K:        %d (kangaroos per worker)\n", BATCH_K);
         printf("  C (parallelism): %d\n", NUM_WORKERS * BATCH_K);
         printf("  VITA_WILD_MAX:  %llu (max steps before respawn)\n", (unsigned long long)VITA_WILD_MAX);
+        printf("  STORAGE:        %s\n", storage_mode == STORAGE_RAM ? "RAM" : "SSD");
         printf("============================================================\n");
         return 0;
     }
@@ -1802,8 +1895,9 @@ int main(int argc, char** argv) {
     printf("--- KANGAROO WILD ---\n");
     printf("[CONFIG] Range: 2^%u - 2^%u | GLOBAL_BITS: %u | DIST_BYTES: %u | TRUNC_BITS: %u\n",
            rt_range_bits_low, rt_range_bits_high, rt_global_bits, rt_dist_bytes, rt_trunc_bits);
-    printf("[CONFIG] Workers: %d | Batch: %d | C: %d | VITA: %llu\n",
-           NUM_WORKERS, BATCH_K, NUM_WORKERS * BATCH_K, (unsigned long long)VITA_WILD_MAX);
+    printf("[CONFIG] Workers: %d | Batch: %d | C: %d | VITA: %llu | Storage: %s\n",
+           NUM_WORKERS, BATCH_K, NUM_WORKERS * BATCH_K, (unsigned long long)VITA_WILD_MAX,
+           storage_mode == STORAGE_RAM ? "RAM" : "SSD");
 
     // ======================================
     // TEST MODE
@@ -2053,13 +2147,13 @@ int main(int argc, char** argv) {
 
 cleanup:
     if (fingerprints && fingerprints != MAP_FAILED)
-        munmap(fingerprints, fingerprint_count * sizeof(uint32_t));
+        munmap(fingerprints, fingerprint_map_size);
     if (bucket_offsets && bucket_offsets != MAP_FAILED)
         munmap(bucket_offsets, bucket_offsets_map_size);
     if (compact_db_array) {
-        if (rt_dist_bytes == MAX_DIST_BYTES && compact_db_array != MAP_FAILED)
-            munmap(compact_db_array, tame_db_file_size);
-        else
+        if (compact_db_is_mmap && compact_db_array != MAP_FAILED)
+            munmap(compact_db_array, compact_db_map_size);
+        else if (!compact_db_is_mmap)
             free(compact_db_array);
     }
     if (tame_db_fd != -1) close(tame_db_fd);
