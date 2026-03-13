@@ -44,8 +44,8 @@ https://gofile.io/d/sy9NnP
 
 https://gofile.io/d/ZeEi2P
 
-| File | Size | Download |
-|------|------|----------|
+| File | Size | 
+|------|------|
 | `75_scored_16_29_tame_db.bin` | ~4 GB | 
 | `75_scored_16_29_fingerprints.bin` | ~2 GB | 
 | `75_scored_16_29_bucket_offsets.bin` | ~16 MB | 
@@ -55,8 +55,8 @@ https://gofile.io/d/ZeEi2P
 
 https://gofile.io/d/4x90xf
 
-| File | Size | Download |
-|------|------|----------|
+| File | Size | 
+|------|------|
 | `75_scored_16_30_tame_db.bin` | ~8 GB | 
 | `75_scored_16_30_fingerprints.bin` | ~4 GB | 
 | `75_scored_16_30_bucket_offsets.bin` | ~16 MB |
